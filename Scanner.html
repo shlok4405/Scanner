@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sarathi Receipt Scanner - Tej Singh Training School</title>
+  
+  <!-- Tesseract.js OCR Engine -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background-color: #f4f7f6; margin: 0; padding: 15px; display: flex; justify-content: center; }
+    .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 480px; }
+    h2 { text-align: center; color: #1a73e8; margin-top: 0; font-size: 22px; }
+    
+    .upload-zone {
+      border: 2px dashed #1a73e8;
+      background: #eef5ff;
+      border-radius: 8px;
+      padding: 15px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    
+    .btn-camera {
+      background: #1a73e8; color: white; border: none; padding: 14px;
+      font-size: 16px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    .btn-camera:active { background: #1557b0; transform: scale(0.98); }
+    
+    #status { margin-top: 12px; font-weight: bold; color: #555; font-size: 14px; text-align: center; }
+    
+    .form-group { margin-bottom: 12px; }
+    label { display: block; margin-bottom: 4px; font-weight: bold; color: #333; font-size: 13px; }
+    input[type="text"] {
+      width: 100%; padding: 10px; border: 1px solid #ccc;
+      border-radius: 6px; font-size: 15px; background: #fafafa;
+    }
+    
+    .action-btn {
+      width: 100%; background: #28a745; color: white; border: none;
+      padding: 14px; border-radius: 6px; font-size: 16px; font-weight: bold;
+      cursor: pointer; margin-top: 10px;
+    }
+    .action-btn:active { background: #218838; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Sarathi Receipt Scanner</h2>
+    
+    <div class="upload-zone">
+      <input type="file" id="slipInput" accept="image/*" capture="environment" style="display: none;">
+      
+      <button type="button" class="btn-camera" onclick="openMobileCamera()">
+        📸 Open Direct Camera
+      </button>
+      <div id="status"></div>
+    </div>
+
+    <!-- Extracted Data Form -->
+    <form id="extractedForm">
+      <div class="form-group">
+        <label>Application Number:</label>
+        <input type="text" id="appNo" placeholder=" ">
+      </div>
+
+      <div class="form-group">
+        <label>Date of Birth (DOB):</label>
+        <input type="text" id="dob" placeholder=" ">
+      </div>
+
+      <div class="form-group">
+        <label>Applicant Name:</label>
+        <input type="text" id="custName" placeholder=" ">
+      </div>
+
+      <div class="form-group">
+        <label>Father's / Guardian Name:</label>
+        <input type="text" id="fatherName" placeholder=" ">
+      </div>
+
+      <button type="button" class="action-btn" onclick="saveData()">💾 Save Record to Database</button>
+    </form>
+  </div>
+
+  <script>
+    // 🔴 Step 1: Replace this with your actual Firebase Configuration
+  const firebaseConfig = {
+  apiKey: "AIzaSyDa3LHlfrgeTkafkkAcbhYooof_07dHS-4",
+  authDomain: "data-store-f9e25.firebaseapp.com",
+  databaseURL: "https://data-store-f9e25-default-rtdb.firebaseio.com",
+  projectId: "data-store-f9e25",
+  storageBucket: "data-store-f9e25.firebasestorage.app",
+  messagingSenderId: "529754642953",
+  appId: "1:529754642953:web:380f8ff3b93c5a6eb6b6d8",
+  measurementId: "G-WER9P0LNTY"
+};
+{
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    // Initialize Firebase
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    const database = firebase.database();
+
+    function openMobileCamera() {
+      const fileInput = document.getElementById('slipInput');
+      fileInput.value = '';
+      fileInput.click();
+    }
+
+    document.getElementById('slipInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      const status = document.getElementById('status');
+      
+      if (!file) return;
+
+      status.innerText = "⏳ Scanning image, please wait...";
+      status.style.color = "#d97706";
+
+      // OCR Engine Execution
+      Tesseract.recognize(
+        file,
+        'eng',
+        { logger: m => console.log(m) }
+      ).then(({ data: { text } }) => {
+        status.innerText = "✅ Data extracted successfully!";
+        status.style.color = "#16a34a";
+
+        // Application Number Extract
+        const appMatch = text.match(/(?:Application\s*No|App\s*No|Appl\s*No|Application\s*ID)[\.\s:]*([0-9]{8,12})/i);
+        if (appMatch) {
+          document.getElementById('appNo').value = appMatch[1];
+        } else {
+          const fallbackApp = text.match(/\b\d{9,10}\b/);
+          if (fallbackApp) document.getElementById('appNo').value = fallbackApp[0];
+        }
+
+        // DOB Extract
+        const dobMatch = text.match(/(?:Date\s*of\s*Birth|DOB|Birth\s*Date)[\.\s:]*([0-9]{2}[\-\/][0-9]{2}[\-\/][0-9]{4})/i);
+        if (dobMatch) {
+          document.getElementById('dob').value = dobMatch[1];
+        }
+
+        // Applicant Name Extract
+        const nameMatch = text.match(/(?:Name|Applicant\s*Name)[\.\s:]*([A-Za-z\s]+)/i);
+        if (nameMatch) {
+          document.getElementById('custName').value = nameMatch[1].trim();
+        }
+
+        // Father's Name Extract
+        const fatherMatch = text.match(/(?:Father'?s?\s*Name|Guardian'?s?\s*Name)[\.\s:]*([A-Za-z\s]+)/i);
+        if (fatherMatch) {
+          document.getElementById('fatherName').value = fatherMatch[1].trim();
+        }
+
+      }).catch(err => {
+        console.error(err);
+        status.innerText = "❌ Error scanning image. Please capture a clear photo.";
+        status.style.color = "#dc2626";
+      });
+    });
+
+    // Save Data Function
+    function saveData() {
+      const app = document.getElementById('appNo').value.trim();
+      const dob = document.getElementById('dob').value.trim();
+      const name = document.getElementById('custName').value.trim();
+      const father = document.getElementById('fatherName').value.trim();
+
+      if (!app && !name) {
+        alert("Please fill or scan the data first!");
+        return;
+      }
+
+      // Record Object
+      const recordData = {
+        applicationNo: app,
+        dob: dob,
+        applicantName: name,
+        fatherName: father,
+        createdAt: new Date().toISOString()
+      };
+
+      // Save to Firebase Database under 'sarathi_records'
+      const newRef = database.ref('sarathi_records').push();
+      newRef.set(recordData).then(() => {
+        alert("Record Saved Successfully!");
+        
+        // Also save a backup in LocalStorage
+        let localRecords = JSON.parse(localStorage.getItem('sarathiRecords') || '[]');
+        localRecords.push(recordData);
+        localStorage.setItem('sarathiRecords', JSON.stringify(localRecords));
+
+        // Form reset after save
+        document.getElementById('extractedForm').reset();
+        document.getElementById('status').innerText = "";
+      }).catch((error) => {
+        console.error("Firebase Error: ", error);
+        alert("Error saving record to Firebase!");
+      });
+    }
+  </script>
+
+</body>
+</html>
